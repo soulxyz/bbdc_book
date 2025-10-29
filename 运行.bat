@@ -32,7 +32,7 @@ if errorlevel 1 (
     )
     echo.
     echo [完成] 依赖库安装成功
-    echo.
+    echo.https://extract_words.py/
 )
 
 REM 运行程序

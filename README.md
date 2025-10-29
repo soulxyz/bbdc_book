@@ -15,6 +15,7 @@
 ### 🔧 核心功能
 - 📝 **单词提取** - 从Markdown文件中提取单词和短语
 - 🔍 **词书核对** - 使用不背单词网站核对掌握情况
+- 🤖 **LLM自动更正** - 使用AI智能更正识别失败的单词（新功能）
 - 📦 **批量处理** - 一次性处理多个文件
 - 💾 **结果保存** - 自动保存处理结果
 
@@ -45,6 +46,30 @@
 ```bash
 pip install -r requirements.txt
 ```
+
+### 2. 配置LLM功能（可选）
+如需启用AI自动更正功能，需要配置硅基流动API密钥：
+
+**方法1：设置环境变量（推荐）**
+```bash
+# Windows (PowerShell)
+$env:SILICONFLOW_API_KEY="your_api_key_here"
+
+# Windows (CMD)
+set SILICONFLOW_API_KEY=your_api_key_here
+
+# Linux/Mac
+export SILICONFLOW_API_KEY="your_api_key_here"
+```
+
+**方法2：永久设置（Windows）**
+- 右键"此电脑" → "属性" → "高级系统设置" → "环境变量"
+- 在"用户变量"中新建变量：
+  - 变量名：`SILICONFLOW_API_KEY`
+  - 变量值：你的API密钥
+
+**获取API密钥：**
+访问 [硅基流动官网](https://siliconflow.cn) 注册并获取API密钥
 
 ### 2. 启动GUI版本（推荐）
 ```bash
@@ -96,6 +121,8 @@ python bbdc_word_checker.py
 
 ### 核心功能特点
 - ✅ **智能识别** - 自动识别表格中的单词和短语
+- ✅ **AI自动更正** - 使用Kimi大模型智能更正拼写错误
+- ✅ **自动验证** - 更正后自动使用不背单词API验证
 - ✅ **去重功能** - 可选择是否去除重复单词
 - ✅ **批量处理** - 支持一次处理多个文件
 - ✅ **自动核对** - 集成不背单词网站核对功能

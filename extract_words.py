@@ -13,6 +13,511 @@ from pathlib import Path
 import requests
 import json
 import time
+from typing import List, Dict, Optional
+
+
+class LLMWordCorrector:
+    """LLM单词更正类 - 调用硅基流动平台"""
+    
+    def __init__(self, api_key=None):
+        """
+        初始化LLM更正器
+        
+        参数:
+            api_key: 硅基流动API密钥，如果不提供则从环境变量SILICONFLOW_API_KEY读取
+        """
+        # 尝试从.env文件读取配置
+        self.api_key = api_key or self._load_from_env_file() or os.environ.get('SILICONFLOW_API_KEY', '')
+        self.base_url = os.environ.get('SILICONFLOW_BASE_URL', "https://api.siliconflow.cn/v1/chat/completions")
+        self.model = os.environ.get('SILICONFLOW_MODEL', "moonshotai/Kimi-K2-Instruct-0905")
+        
+        if not self.api_key:
+            print("⚠️  警告: 未设置SILICONFLOW_API_KEY，LLM自动更正功能将被禁用")
+            print("💡 提示: 请查看 LLM使用说明.md 了解如何配置")
+    
+    def _load_from_env_file(self):
+        """从.env文件加载API密钥"""
+        env_file = os.path.join(os.path.dirname(__file__), '.env')
+        if os.path.exists(env_file):
+            try:
+                with open(env_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            value = value.strip().strip('"').strip("'")
+                            if key == 'SILICONFLOW_API_KEY' and value:
+                                return value
+            except Exception as e:
+                print(f"⚠️  读取.env文件失败: {e}")
+        return None
+    
+    def is_enabled(self):
+        """检查LLM功能是否启用"""
+        return bool(self.api_key)
+    
+    def correct_word(self, word, meaning="", context=""):
+        """
+        使用LLM更正单词
+        
+        参数:
+            word: 原始单词（可能有错误）
+            meaning: 单词的中文释义
+            context: 上下文信息
+        
+        返回:
+            dict: {
+                'success': bool,
+                'original': str,
+                'corrected': str,
+                'confidence': str,
+                'reason': str
+            }
+        """
+        if not self.is_enabled():
+            return {
+                'success': False,
+                'original': word,
+                'corrected': word,
+                'confidence': 'none',
+                'reason': 'LLM功能未启用'
+            }
+        
+        # 构建提示词
+        prompt = self._build_prompt(word, meaning, context)
+        
+        try:
+            response = requests.post(
+                self.base_url,
+                headers={
+                    'Authorization': f'Bearer {self.api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': self.model,
+                    'messages': [
+                        {
+                            'role': 'system',
+                            'content': '你是一个专业的英语单词拼写检查助手。你的任务是识别和修正英语单词中的拼写错误。只返回JSON格式的结果。'
+                        },
+                        {
+                            'role': 'user',
+                            'content': prompt
+                        }
+                    ],
+                    'temperature': 0.3,
+                    'max_tokens': 200
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                return self._parse_llm_response(word, content)
+            else:
+                return {
+                    'success': False,
+                    'original': word,
+                    'corrected': word,
+                    'confidence': 'none',
+                    'reason': f'API调用失败: HTTP {response.status_code}'
+                }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'original': word,
+                'corrected': word,
+                'confidence': 'none',
+                'reason': f'调用LLM时出错: {str(e)}'
+            }
+    
+    def _build_prompt(self, word, meaning, context):
+        """构建提示词"""
+        prompt = f"""请检查以下英语单词是否有拼写错误，如果有错误请给出正确的拼写。
+
+原始单词: {word}
+中文释义: {meaning}
+{f'上下文: {context}' if context else ''}
+
+请以JSON格式返回结果，包含以下字段：
+- corrected: 更正后的单词（如果没有错误则返回原单词）
+- confidence: 置信度，可选值为 "high"（高）、"medium"（中）、"low"（低）
+- reason: 简短说明更正的原因或判断没有错误的依据
+
+示例输出：
+{{"corrected": "example", "confidence": "high", "reason": "原单词拼写正确"}}
+或
+{{"corrected": "receive", "confidence": "high", "reason": "修正了i和e的顺序"}}
+
+只返回JSON，不要有其他内容。"""
+        return prompt
+    
+    def _parse_llm_response(self, original_word, content):
+        """解析LLM返回的结果"""
+        try:
+            # 尝试提取JSON内容
+            content = content.strip()
+            
+            # 如果包含markdown代码块，提取其中的JSON
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0].strip()
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0].strip()
+            
+            # 解析JSON
+            result = json.loads(content)
+            
+            corrected = result.get('corrected', original_word).strip()
+            confidence = result.get('confidence', 'low')
+            reason = result.get('reason', '无说明')
+            
+            return {
+                'success': True,
+                'original': original_word,
+                'corrected': corrected,
+                'confidence': confidence,
+                'reason': reason
+            }
+        
+        except json.JSONDecodeError:
+            # 如果无法解析JSON，尝试从文本中提取单词
+            words = content.split()
+            if words:
+                return {
+                    'success': True,
+                    'original': original_word,
+                    'corrected': words[0].strip('",.:;'),
+                    'confidence': 'low',
+                    'reason': '从响应中提取的单词'
+                }
+            else:
+                return {
+                    'success': False,
+                    'original': original_word,
+                    'corrected': original_word,
+                    'confidence': 'none',
+                    'reason': '无法解析LLM响应'
+                }
+        except Exception as e:
+            return {
+                'success': False,
+                'original': original_word,
+                'corrected': original_word,
+                'confidence': 'none',
+                'reason': f'解析响应时出错: {str(e)}'
+            }
+    
+    def batch_correct(self, words_with_meanings, max_workers=3):
+        """
+        批量更正单词
+        
+        参数:
+            words_with_meanings: 单词及释义列表 [{'word': str, 'meaning': str}, ...]
+            max_workers: 最大并发数
+        
+        返回:
+            list: 更正结果列表
+        """
+        results = []
+        for item in words_with_meanings:
+            word = item.get('word', '')
+            meaning = item.get('meaning', '')
+            result = self.correct_word(word, meaning)
+            results.append(result)
+            time.sleep(0.5)  # 避免API限流
+        
+        return results
+    
+    def generate_word_candidates(self, word, meaning):
+        """
+        生成单词的候选词（词根、派生词等）
+        
+        参数:
+            word: 原始单词
+            meaning: 单词释义
+        
+        返回:
+            dict: 候选词信息
+        """
+        if not self.is_enabled():
+            return {
+                'success': False,
+                'candidates': [],
+                'reason': 'LLM功能未启用'
+            }
+        
+        prompt = f"""对于无法识别的英语单词"{word}"（释义：{meaning}），请生成3-5个可能的候选词。
+
+候选词可以是：
+1. 该单词的词根或基础形式
+2. 该单词去掉前缀/后缀后的形式
+3. 意思相近的常见单词
+4. 可能的正确拼写（如果原词有拼写错误）
+
+要求：
+- 候选词必须是真实存在的常见英语单词
+- 优先选择更基础、更常用的词汇
+- 保持与原释义的相关性
+
+请以JSON格式返回，包含：
+- candidates: 候选词列表（每个包含word和reason字段）
+
+示例输出：
+{{
+  "candidates": [
+    {{"word": "system", "reason": "supersystem的词根"}},
+    {{"word": "efficient", "reason": "ineffectively的反义词根"}},
+    {{"word": "finance", "reason": "finanzially的词根"}}
+  ]
+}}
+
+只返回JSON，不要其他内容。"""
+
+        try:
+            response = requests.post(
+                self.base_url,
+                headers={
+                    'Authorization': f'Bearer {self.api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': self.model,
+                    'messages': [
+                        {
+                            'role': 'system',
+                            'content': '你是一个专业的英语词汇助手。你的任务是为给定的单词生成合适的候选词。只返回JSON格式的结果。'
+                        },
+                        {
+                            'role': 'user',
+                            'content': prompt
+                        }
+                    ],
+                    'temperature': 0.5,
+                    'max_tokens': 300
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                return self._parse_candidates_response(word, content)
+            else:
+                return {
+                    'success': False,
+                    'candidates': [],
+                    'reason': f'API调用失败: HTTP {response.status_code}'
+                }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'candidates': [],
+                'reason': f'调用LLM时出错: {str(e)}'
+            }
+    
+    def _parse_candidates_response(self, original_word, content):
+        """解析候选词响应"""
+        try:
+            content = content.strip()
+            
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0].strip()
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0].strip()
+            
+            result = json.loads(content)
+            candidates = result.get('candidates', [])
+            
+            return {
+                'success': True,
+                'original': original_word,
+                'candidates': candidates,
+                'reason': 'success'
+            }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'candidates': [],
+                'reason': f'解析响应失败: {str(e)}'
+            }
+    
+    def select_best_candidate(self, original_word, meaning, candidates_with_status):
+        """
+        从候选词中选择最有代表性的一个
+        
+        参数:
+            original_word: 原始单词
+            meaning: 原始释义
+            candidates_with_status: 候选词及其验证状态 [{'word': str, 'verified': bool, 'reason': str}, ...]
+        
+        返回:
+            dict: 最佳候选词信息
+        """
+        if not self.is_enabled():
+            return {
+                'success': False,
+                'selected': None,
+                'reason': 'LLM功能未启用'
+            }
+        
+        # 只考虑验证通过的候选词
+        verified_candidates = [c for c in candidates_with_status if c.get('verified', False)]
+        
+        if not verified_candidates:
+            return {
+                'success': False,
+                'selected': None,
+                'reason': '没有验证通过的候选词'
+            }
+        
+        if len(verified_candidates) == 1:
+            return {
+                'success': True,
+                'selected': verified_candidates[0]['word'],
+                'reason': '只有一个验证通过的候选词',
+                'confidence': 'high'
+            }
+        
+        # 构建候选词列表字符串
+        candidates_str = '\n'.join([
+            f"{i+1}. {c['word']} - {c.get('reason', '无说明')}"
+            for i, c in enumerate(verified_candidates)
+        ])
+        
+        prompt = f"""原单词：{original_word}
+释义：{meaning}
+
+以下候选词都是有效的英语单词：
+{candidates_str}
+
+请从中选择最有代表性、最值得学习的一个单词。选择标准：
+1. 使用频率更高的词
+2. 更基础、更核心的词
+3. 能覆盖更多派生词的词根
+4. 与原释义最相关的词
+
+请以JSON格式返回：
+{{
+  "selected": "选中的单词",
+  "reason": "选择理由",
+  "confidence": "high/medium/low"
+}}
+
+只返回JSON，不要其他内容。"""
+
+        try:
+            response = requests.post(
+                self.base_url,
+                headers={
+                    'Authorization': f'Bearer {self.api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': self.model,
+                    'messages': [
+                        {
+                            'role': 'system',
+                            'content': '你是一个专业的英语教学专家。帮助选择最值得学习的单词。只返回JSON格式的结果。'
+                        },
+                        {
+                            'role': 'user',
+                            'content': prompt
+                        }
+                    ],
+                    'temperature': 0.3,
+                    'max_tokens': 200
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                return self._parse_selection_response(content)
+            else:
+                # 如果API调用失败，返回第一个候选词
+                return {
+                    'success': True,
+                    'selected': verified_candidates[0]['word'],
+                    'reason': 'API调用失败，返回第一个候选词',
+                    'confidence': 'low'
+                }
+        
+        except Exception as e:
+            return {
+                'success': True,
+                'selected': verified_candidates[0]['word'],
+                'reason': f'选择失败: {str(e)}，返回第一个候选词',
+                'confidence': 'low'
+            }
+    
+    def _parse_selection_response(self, content):
+        """解析选择响应"""
+        try:
+            content = content.strip()
+            
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0].strip()
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0].strip()
+            
+            result = json.loads(content)
+            
+            return {
+                'success': True,
+                'selected': result.get('selected', ''),
+                'reason': result.get('reason', '无说明'),
+                'confidence': result.get('confidence', 'medium')
+            }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'selected': None,
+                'reason': f'解析响应失败: {str(e)}'
+            }
+
+
+def batch_verify_candidates(bbdc_checker, candidates_list):
+    """
+    批量验证候选词
+    
+    参数:
+        bbdc_checker: 不背单词核对器实例
+        candidates_list: 候选词列表
+    
+    返回:
+        dict: 验证结果，key为单词，value为是否验证通过
+    """
+    if not candidates_list:
+        return {}
+    
+    # 创建临时文件
+    temp_file = 'temp_candidates_verify.txt'
+    try:
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            for word in candidates_list:
+                f.write(word + '\n')
+        
+        # 验证
+        result = bbdc_checker.upload_word_file(temp_file)
+        
+        if "error" not in result:
+            parsed = bbdc_checker.parse_result(result)
+            if "error" not in parsed:
+                recognized = set(w.lower() for w in parsed.get('recognized_words', []))
+                return {word: (word.lower() in recognized) for word in candidates_list}
+        
+        return {word: False for word in candidates_list}
+        
+    finally:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
 
 
 class BBDCWordChecker:
@@ -137,7 +642,320 @@ def find_word_info_in_markdown(file_path, word):
         return None
 
 
-def check_words_with_bbdc(file_path, words_list, original_md_file):
+def apply_corrections_to_file(file_path, corrections):
+    """
+    将验证通过的更正应用到文件
+    
+    参数:
+        file_path: 单词文件路径
+        corrections: 更正列表
+    
+    返回:
+        bool: 是否成功
+    """
+    try:
+        # 读取文件内容
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 创建备份
+        backup_path = file_path + '.backup'
+        with open(backup_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"📦 已创建备份文件: {os.path.basename(backup_path)}")
+        
+        # 应用更正
+        lines = content.split('\n')
+        correction_count = 0
+        
+        for correction in corrections:
+            original = correction['original']
+            corrected = correction['corrected']
+            
+            # 在文件中查找并替换
+            for i, line in enumerate(lines):
+                if line.strip() == original:
+                    lines[i] = corrected
+                    correction_count += 1
+                    print(f"  ✓ 第{i+1}行: {original} → {corrected}")
+        
+        # 写回文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        
+        print(f"\n✅ 成功替换 {correction_count} 处错误")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 应用更正失败: {e}")
+        return False
+
+
+def auto_correct_with_llm(parsed_result, unrecognized_details, llm_corrector, bbdc_checker, original_file_path):
+    """
+    使用LLM自动更正识别失败的单词，并重新验证
+    
+    参数:
+        parsed_result: 原始核对结果
+        unrecognized_details: 识别失败的单词详细信息
+        llm_corrector: LLM更正器实例
+        bbdc_checker: 不背单词核对器实例
+        original_file_path: 原始单词文件路径
+    
+    返回:
+        dict: 更新后的核对结果
+    """
+    correction_results = []
+    corrected_words = []  # 更正后需要验证的单词
+    
+    print("\n" + "=" * 60)
+    print("🤖 LLM自动更正处理")
+    print("=" * 60)
+    
+    # 逐个处理识别失败的单词
+    for i, detail in enumerate(unrecognized_details, 1):
+        word = detail['word']
+        meaning = detail.get('meaning', '')
+        
+        print(f"\n[{i}/{len(unrecognized_details)}] 处理单词: {word}")
+        
+        # 调用LLM更正
+        correction = llm_corrector.correct_word(word, meaning)
+        correction['original_meaning'] = meaning
+        correction['line_number'] = detail.get('line_number', '未知')
+        correction_results.append(correction)
+        
+        if correction['success']:
+            corrected_word = correction['corrected']
+            print(f"  原单词: {word}")
+            print(f"  更正为: {corrected_word}")
+            print(f"  置信度: {correction['confidence']}")
+            print(f"  原因: {correction['reason']}")
+            
+            # 如果单词被更正了（不同于原单词）
+            if corrected_word.lower() != word.lower():
+                corrected_words.append(corrected_word)
+        else:
+            print(f"  ❌ 更正失败: {correction['reason']}")
+    
+    # 如果有更正后的单词，进行二次验证
+    verified_corrections = []
+    if corrected_words:
+        print(f"\n\n🔍 正在对 {len(corrected_words)} 个更正后的单词进行验证...")
+        
+        # 创建临时文件包含更正后的单词
+        temp_file = original_file_path.replace('.txt', '_llm_corrected_temp.txt')
+        try:
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                for word in corrected_words:
+                    f.write(word + '\n')
+            
+            # 使用不背单词API验证更正后的单词
+            verify_result = bbdc_checker.upload_word_file(temp_file)
+            
+            if "error" not in verify_result:
+                verify_parsed = bbdc_checker.parse_result(verify_result)
+                
+                if "error" not in verify_parsed:
+                    verified_recognized = set(w.lower() for w in verify_parsed.get('recognized_words', []))
+                    
+                    # 标记哪些更正后的单词被成功识别
+                    for correction in correction_results:
+                        if correction['success']:
+                            corrected_word = correction['corrected']
+                            if corrected_word.lower() in verified_recognized:
+                                correction['verified'] = True
+                                correction['verification_status'] = '✅ 验证通过'
+                                verified_corrections.append(correction)
+                            else:
+                                correction['verified'] = False
+                                correction['verification_status'] = '❌ 验证失败'
+                        else:
+                            correction['verified'] = False
+                            correction['verification_status'] = '⚠️  未更正'
+                else:
+                    print(f"⚠️  验证结果解析失败: {verify_parsed.get('error', '未知错误')}")
+            else:
+                print(f"⚠️  验证请求失败: {verify_result.get('error', '未知错误')}")
+            
+            # 清理临时文件
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+                
+        except Exception as e:
+            print(f"⚠️  验证过程出错: {e}")
+    
+    # 更新结果
+    parsed_result['llm_corrections'] = correction_results
+    parsed_result['verified_corrections'] = verified_corrections
+    
+    # 统计信息
+    total_corrections = len(correction_results)
+    successful_corrections = sum(1 for c in correction_results if c.get('verified', False))
+    failed_corrections = [c for c in correction_results if not c.get('verified', False)]
+    
+    print("\n" + "=" * 60)
+    print(f"📊 LLM更正统计:")
+    print(f"  尝试更正: {total_corrections} 个单词")
+    print(f"  验证通过: {successful_corrections} 个单词")
+    print(f"  验证失败: {len(failed_corrections)} 个单词")
+    if total_corrections > 0:
+        print(f"  成功率: {successful_corrections/total_corrections*100:.1f}%")
+    print("=" * 60)
+    
+    # 对验证失败的单词自动进行二次处理（生成候选词）
+    second_round_results = []
+    if failed_corrections and successful_corrections < total_corrections:
+        print(f"\n\n🔄 自动对 {len(failed_corrections)} 个验证失败的单词进行二次处理（生成候选词）...")
+        
+        second_round_results = process_failed_corrections(
+            failed_corrections, 
+            llm_corrector, 
+            bbdc_checker
+        )
+        
+        if second_round_results:
+            parsed_result['second_round_corrections'] = second_round_results
+            # 将二次处理成功的结果也加入verified_corrections
+            for result in second_round_results:
+                if result.get('selected_word'):
+                    verified_corrections.append({
+                        'original': result['original'],
+                        'corrected': result['selected_word'],
+                        'verified': True,
+                        'verification_status': '✅ 二次处理验证通过',
+                        'confidence': result.get('confidence', 'medium'),
+                        'reason': result.get('reason', ''),
+                        'original_meaning': result.get('original_meaning', ''),
+                        'line_number': result.get('line_number', '未知')
+                    })
+    
+    # 如果有验证通过的更正，自动应用
+    all_corrections_to_apply = verified_corrections
+    
+    if all_corrections_to_apply:
+        print(f"\n\n✅ 共有 {len(all_corrections_to_apply)} 个单词可以更正！")
+        print("\n更正列表：")
+        for i, correction in enumerate(all_corrections_to_apply, 1):
+            status_icon = "🔧" if "二次处理" in correction.get('verification_status', '') else "✓"
+            print(f"  {status_icon} {i}. {correction['original']} → {correction['corrected']}")
+            if "二次处理" in correction.get('verification_status', ''):
+                print(f"      说明: {correction.get('reason', '')}")
+        
+        print("\n🔧 正在自动应用更正到文件...")
+        success = apply_corrections_to_file(original_file_path, all_corrections_to_apply)
+        if success:
+            parsed_result['corrections_applied'] = True
+            print("✅ 更正已成功应用到文件！")
+        else:
+            parsed_result['corrections_applied'] = False
+            print("❌ 应用更正失败")
+    
+    return parsed_result
+
+
+def process_failed_corrections(failed_corrections, llm_corrector, bbdc_checker):
+    """
+    处理验证失败的更正，生成候选词并选择最佳候选
+    
+    参数:
+        failed_corrections: 验证失败的更正列表
+        llm_corrector: LLM更正器实例
+        bbdc_checker: 不背单词核对器实例
+    
+    返回:
+        list: 二次处理结果
+    """
+    results = []
+    
+    print("\n" + "=" * 60)
+    print("🔄 二次处理 - 生成候选词")
+    print("=" * 60)
+    
+    for i, correction in enumerate(failed_corrections, 1):
+        word = correction['original']
+        meaning = correction.get('original_meaning', '')
+        
+        print(f"\n[{i}/{len(failed_corrections)}] 处理单词: {word}")
+        print(f"  释义: {meaning}")
+        
+        # 生成候选词
+        candidates_result = llm_corrector.generate_word_candidates(word, meaning)
+        
+        if not candidates_result['success'] or not candidates_result['candidates']:
+            print(f"  ⚠️  生成候选词失败: {candidates_result.get('reason', '未知原因')}")
+            continue
+        
+        candidates = candidates_result['candidates']
+        print(f"  📝 生成了 {len(candidates)} 个候选词:")
+        for j, cand in enumerate(candidates, 1):
+            print(f"     {j}. {cand['word']} - {cand.get('reason', '')}")
+        
+        # 提取候选词列表
+        candidate_words = [c['word'] for c in candidates]
+        
+        # 批量验证候选词
+        print(f"  🔍 验证候选词...")
+        verification_results = batch_verify_candidates(bbdc_checker, candidate_words)
+        
+        # 标记验证结果
+        candidates_with_status = []
+        verified_count = 0
+        for cand in candidates:
+            word_text = cand['word']
+            is_verified = verification_results.get(word_text, False)
+            candidates_with_status.append({
+                'word': word_text,
+                'verified': is_verified,
+                'reason': cand.get('reason', '')
+            })
+            if is_verified:
+                verified_count += 1
+                print(f"     ✓ {word_text} - 验证通过")
+            else:
+                print(f"     ✗ {word_text} - 验证失败")
+        
+        if verified_count == 0:
+            print(f"  ❌ 所有候选词都验证失败")
+            continue
+        
+        # 选择最佳候选词
+        print(f"  🤖 AI选择最有代表性的单词...")
+        selection_result = llm_corrector.select_best_candidate(word, meaning, candidates_with_status)
+        
+        if selection_result['success'] and selection_result['selected']:
+            selected = selection_result['selected']
+            print(f"  ✅ 选择: {selected}")
+            print(f"     理由: {selection_result.get('reason', '')}")
+            print(f"     置信度: {selection_result.get('confidence', '')}")
+            
+            results.append({
+                'original': word,
+                'selected_word': selected,
+                'candidates': candidates_with_status,
+                'reason': selection_result.get('reason', ''),
+                'confidence': selection_result.get('confidence', ''),
+                'original_meaning': meaning,
+                'line_number': correction.get('line_number', '未知')
+            })
+        else:
+            print(f"  ⚠️  选择失败: {selection_result.get('reason', '')}")
+        
+        time.sleep(0.5)  # 避免API限流
+    
+    print("\n" + "=" * 60)
+    print(f"📊 二次处理统计:")
+    print(f"  处理单词: {len(failed_corrections)} 个")
+    print(f"  成功选择: {len(results)} 个")
+    if len(failed_corrections) > 0:
+        print(f"  成功率: {len(results)/len(failed_corrections)*100:.1f}%")
+    print("=" * 60)
+    
+    return results
+
+
+def check_words_with_bbdc(file_path, words_list, original_md_file, use_llm=True):
     """
     使用不背单词核对单词列表
     
@@ -145,6 +963,7 @@ def check_words_with_bbdc(file_path, words_list, original_md_file):
         file_path: 临时单词文件路径
         words_list: 单词列表
         original_md_file: 原始markdown文件路径
+        use_llm: 是否使用LLM自动更正识别失败的单词
     
     返回:
         dict: 核对结果
@@ -179,6 +998,23 @@ def check_words_with_bbdc(file_path, words_list, original_md_file):
     
     parsed_result['unrecognized_details'] = unrecognized_details
     parsed_result['original_file'] = original_md_file
+    
+    # 使用LLM自动更正识别失败的单词
+    if use_llm and parsed_result['unrecognized_details']:
+        print(f"\n🤖 检测到 {len(parsed_result['unrecognized_details'])} 个识别失败的单词，正在使用LLM尝试自动更正...")
+        llm_corrector = LLMWordCorrector()
+        
+        if llm_corrector.is_enabled():
+            parsed_result = auto_correct_with_llm(
+                parsed_result, 
+                unrecognized_details, 
+                llm_corrector, 
+                checker, 
+                file_path
+            )
+        else:
+            print("⚠️  LLM功能未启用，跳过自动更正")
+    
     return parsed_result
 
 
@@ -350,6 +1186,25 @@ def print_check_result(check_result, output_file):
     print(f"  识别不成功: {check_result['unrecognized_count']}")
     print(f"  识别成功率: {check_result['recognized_count']/check_result['total_count']*100:.1f}%")
     
+    # 显示LLM更正统计
+    if 'llm_corrections' in check_result:
+        corrections = check_result['llm_corrections']
+        verified = check_result.get('verified_corrections', [])
+        second_round = check_result.get('second_round_corrections', [])
+        
+        print(f"\n🤖 LLM自动更正:")
+        print(f"  尝试更正: {len(corrections)} 个单词")
+        first_round_verified = len([v for v in verified if '二次处理' not in v.get('verification_status', '')])
+        print(f"  验证通过: {first_round_verified} 个单词")
+        
+        if second_round:
+            print(f"\n🔄 二次处理（候选词）:")
+            print(f"  处理单词: {len([c for c in corrections if not c.get('verified', False)])} 个")
+            print(f"  成功选择: {len(second_round)} 个单词")
+        
+        if check_result.get('corrections_applied'):
+            print(f"\n  ✅ 已应用更正到文件")
+    
     # 显示识别成功的单词（前10个）
     if check_result['recognized_words']:
         print(f"\n✅ 识别成功的单词（前10个）:")
@@ -359,6 +1214,37 @@ def print_check_result(check_result, output_file):
         if len(check_result['recognized_words']) > 10:
             print(f"  ... 还有 {len(check_result['recognized_words']) - 10} 个识别成功的单词")
     
+    # 显示LLM更正详情
+    if 'llm_corrections' in check_result and check_result['llm_corrections']:
+        print(f"\n\n🤖 LLM更正详情:")
+        print("=" * 80)
+        for i, correction in enumerate(check_result['llm_corrections'], 1):
+            status = correction.get('verification_status', '未验证')
+            print(f"\n  [{i}] {correction['original']} → {correction['corrected']}")
+            print(f"      状态: {status}")
+            print(f"      置信度: {correction.get('confidence', 'unknown')}")
+            print(f"      原因: {correction.get('reason', '无')}")
+            print(f"      释义: {correction.get('original_meaning', '无')}")
+            print(f"      行号: 第{correction.get('line_number', '未知')}行")
+        print("=" * 80)
+    
+    # 显示二次处理详情
+    if 'second_round_corrections' in check_result and check_result['second_round_corrections']:
+        print(f"\n\n🔄 二次处理（候选词选择）详情:")
+        print("=" * 80)
+        for i, result in enumerate(check_result['second_round_corrections'], 1):
+            print(f"\n  [{i}] {result['original']} → {result['selected_word']}")
+            print(f"      候选词:")
+            for cand in result.get('candidates', []):
+                status = "✓" if cand.get('verified') else "✗"
+                print(f"        {status} {cand['word']} - {cand.get('reason', '')}")
+            print(f"      AI选择: {result['selected_word']}")
+            print(f"      理由: {result.get('reason', '无')}")
+            print(f"      置信度: {result.get('confidence', 'unknown')}")
+            print(f"      释义: {result.get('original_meaning', '无')}")
+            print(f"      行号: 第{result.get('line_number', '未知')}行")
+        print("=" * 80)
+    
     # 显示识别不成功的单词（详细信息）
     if check_result['unrecognized_details']:
         source_file = os.path.basename(check_result.get('original_file', '未知文件'))
@@ -367,11 +1253,12 @@ def print_check_result(check_result, output_file):
         for i, detail in enumerate(check_result['unrecognized_details'], 1):
             print(f"  {i:2d}. {detail['word']:<15} 第{detail['line_number']}行  {detail['meaning']}")
     
-    # 询问是否保存详细结果
-    save_choice = input("\n💾 是否保存详细结果到文件？(y/n): ").strip().lower()
-    if save_choice == 'y':
+    # 自动保存详细结果
+    if check_result.get('llm_corrections') or check_result['unrecognized_count'] > 0:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         detail_output = f"bbdc_check_detail_{timestamp}.txt"
+        
+        print(f"\n💾 自动保存详细结果到: {detail_output}")
         
         try:
             with open(detail_output, 'w', encoding='utf-8') as f:
@@ -385,6 +1272,19 @@ def print_check_result(check_result, output_file):
                 f.write(f"  识别不成功: {check_result['unrecognized_count']}\n")
                 f.write(f"  识别成功率: {check_result['recognized_count']/check_result['total_count']*100:.1f}%\n\n")
                 
+                # 保存LLM更正信息
+                if 'llm_corrections' in check_result and check_result['llm_corrections']:
+                    f.write("\n" + "=" * 30 + " LLM自动更正详情 " + "=" * 30 + "\n\n")
+                    if check_result.get('corrections_applied'):
+                        f.write("✅ 更正已应用到文件\n\n")
+                    for i, correction in enumerate(check_result['llm_corrections'], 1):
+                        f.write(f"{i:3d}. {correction['original']} → {correction['corrected']}\n")
+                        f.write(f"     状态: {correction.get('verification_status', '未验证')}\n")
+                        f.write(f"     置信度: {correction.get('confidence', 'unknown')}\n")
+                        f.write(f"     原因: {correction.get('reason', '无')}\n")
+                        f.write(f"     释义: {correction.get('original_meaning', '无')}\n")
+                        f.write(f"     行号: 第{correction.get('line_number', '未知')}行\n\n")
+                
                 f.write("=" * 30 + " 识别成功的单词 " + "=" * 30 + "\n")
                 for i, word in enumerate(check_result['recognized_words'], 1):
                     f.write(f"{i:3d}. {word}\n")
@@ -395,10 +1295,12 @@ def print_check_result(check_result, output_file):
                 for i, detail in enumerate(check_result['unrecognized_details'], 1):
                     f.write(f"{i:3d}. {detail['word']:<20} 第{detail['line_number']}行  {detail['meaning']}\n")
             
-            print(f"💾 详细结果已保存到: {detail_output}")
+            print(f"✅ 详细结果已保存")
             
         except Exception as e:
             print(f"❌ 保存详细结果失败: {e}")
+    else:
+        print("\n💡 提示: 所有单词都已识别成功，无需保存详细报告")
 
 
 def print_header():
