@@ -1307,6 +1307,7 @@ def print_header():
     """打印程序头部"""
     print("\n" + "=" * 60)
     print("           📚 单词提取工具 - Word Extractor")
+    print("           支持 PDF 和 Markdown 文件")
     print("=" * 60)
     print()
 
@@ -1335,6 +1336,7 @@ def get_input_file():
     """获取输入文件路径"""
     print("\n📂 请输入文件路径：")
     print("  提示：可以直接拖拽文件到此窗口，或输入完整路径")
+    print("  支持格式：PDF、Markdown (.md)")
     
     while True:
         file_path = input("文件路径: ").strip().strip('"').strip("'")
@@ -1350,8 +1352,9 @@ def get_input_file():
                 return None
             continue
         
-        if not file_path.endswith('.md'):
-            print("⚠️  警告：文件不是 .md 格式，是否继续？(y/n): ", end='')
+        # 支持 PDF 和 MD 格式
+        if not (file_path.lower().endswith('.md') or file_path.lower().endswith('.pdf')):
+            print("⚠️  警告：文件不是 .md 或 .pdf 格式，是否继续？(y/n): ", end='')
             if input().strip().lower() != 'y':
                 continue
         
@@ -1409,6 +1412,58 @@ def preview_results(words_data, phrases_data=None, limit=10):
             print(f"  ... 还有 {len(phrases_data) - limit} 个短语未显示")
     
     print()
+
+
+def process_pdf_file(pdf_path, output_dir=None):
+    """
+    处理 PDF 文件：通过 Mineru API 转换为 Markdown 并提取单词
+    
+    参数:
+        pdf_path: PDF 文件路径
+        output_dir: 输出目录
+    
+    返回:
+        str: 生成的 markdown 文件路径，如果失败返回 None
+    """
+    try:
+        from mineru_api import MineruWordExtractor
+    except ImportError:
+        print("❌ 无法导入 mineru_api 模块，请确保 mineru_api.py 文件存在")
+        return None
+    
+    print(f"\n{'='*60}")
+    print(f"📄 检测到 PDF 文件，将通过 Mineru API 处理")
+    print(f"{'='*60}\n")
+    
+    try:
+        # 创建 Mineru 提取器
+        extractor = MineruWordExtractor()
+        
+        # 处理 PDF
+        result = extractor.process_local_pdf(
+            pdf_path,
+            output_dir=output_dir,
+            auto_extract_words=True,
+            is_ocr=True
+        )
+        
+        if result.get('success'):
+            # 获取生成的 markdown 文件
+            markdown_files = result.get('markdown_files', [])
+            if markdown_files:
+                return markdown_files[0]  # 返回第一个 markdown 文件
+        else:
+            print(f"❌ PDF 处理失败: {result.get('error')}")
+            return None
+    
+    except ValueError as e:
+        print(f"❌ {str(e)}")
+        print("\n💡 请在 .env 文件中配置 MINERU_API_TOKEN")
+        print("   Token 获取地址: https://mineru.net/")
+        return None
+    except Exception as e:
+        print(f"❌ 处理 PDF 时出错: {e}")
+        return None
 
 
 def find_markdown_files(directory='.'):
@@ -1493,6 +1548,24 @@ def interactive_mode():
         if not input_file:
             continue
         
+        # 检查文件类型
+        is_pdf = input_file.lower().endswith('.pdf')
+        
+        # 如果是 PDF，先转换为 Markdown
+        if is_pdf:
+            print("\n🔄 正在通过 Mineru API 处理 PDF...")
+            markdown_file = process_pdf_file(input_file)
+            
+            if not markdown_file:
+                print("❌ PDF 处理失败")
+                input("\n按回车键继续...")
+                continue
+            
+            print(f"✅ PDF 已转换为 Markdown: {os.path.basename(markdown_file)}")
+            print(f"ℹ️  单词已自动提取和核对，查看生成的文件")
+            input("\n按回车键继续...")
+            continue
+        
         # 根据模式设置默认输出文件名
         base_name = Path(input_file).stem
         
@@ -1553,11 +1626,11 @@ if __name__ == '__main__':
     # 检查是否有命令行参数
     if len(sys.argv) > 1:
         # 命令行模式
-        parser = argparse.ArgumentParser(description='从markdown格式的单词本中提取单词')
-        parser.add_argument('input_file', help='输入的markdown文件路径')
+        parser = argparse.ArgumentParser(description='从 PDF 或 Markdown 文件中提取单词')
+        parser.add_argument('input_file', help='输入文件路径（支持 PDF 和 Markdown）')
         parser.add_argument('-o', '--output', help='输出文件路径')
-        parser.add_argument('-m', '--mode', choices=['full', 'words_only'], default='full',
-                            help='提取模式：full=完整信息，words_only=仅单词')
+        parser.add_argument('-m', '--mode', choices=['full', 'words_only'], default='words_only',
+                            help='提取模式：full=完整信息，words_only=仅单词（默认）')
         parser.add_argument('-p', '--phrases', action='store_true',
                             help='是否包含短语（仅在full模式下有效）')
         parser.add_argument('--no-unique', action='store_true',
@@ -1565,20 +1638,39 @@ if __name__ == '__main__':
         
         args = parser.parse_args()
         
-        # 设置默认输出文件名
-        if not args.output:
-            if args.mode == 'full':
-                args.output = 'extracted_words_full.txt'
+        # 检查文件是否存在
+        if not os.path.exists(args.input_file):
+            print(f"❌ 文件不存在: {args.input_file}")
+            sys.exit(1)
+        
+        # 检查文件类型
+        is_pdf = args.input_file.lower().endswith('.pdf')
+        
+        if is_pdf:
+            # 处理 PDF 文件
+            print(f"📄 检测到 PDF 文件，将通过 Mineru API 处理...")
+            markdown_file = process_pdf_file(args.input_file, args.output)
+            if markdown_file:
+                print("\n✅ PDF 处理完成！单词已自动提取和核对")
             else:
-                args.output = 'extracted_words.txt'
-        
-        # 执行提取
-        if args.mode == 'full':
-            extract_words_from_markdown(args.input_file, args.output, args.phrases)
+                print("\n❌ PDF 处理失败")
+                sys.exit(1)
         else:
-            extract_words_only(args.input_file, args.output, not args.no_unique)
-        
-        print("\n提取完成！")
+            # 处理 Markdown 文件
+            # 设置默认输出文件名
+            if not args.output:
+                if args.mode == 'full':
+                    args.output = 'extracted_words_full.txt'
+                else:
+                    args.output = 'extracted_words.txt'
+            
+            # 执行提取
+            if args.mode == 'full':
+                extract_words_from_markdown(args.input_file, args.output, args.phrases)
+            else:
+                extract_words_only(args.input_file, args.output, not args.no_unique)
+            
+            print("\n提取完成！")
     else:
         # 交互式模式
         try:
