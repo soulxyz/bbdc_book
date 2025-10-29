@@ -1,0 +1,132 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build executables with PyInstaller
+      run: |
+        # 打包主程序
+        pyinstaller --onefile --windowed --name="不背单词单词本制作" --icon=NONE `
+          --add-data "README.md;." `
+          --hidden-import=bs4 `
+          --hidden-import=lxml `
+          --hidden-import=requests `
+          extract_words.py
+        
+        # 打包 Mineru API 工具
+        pyinstaller --onefile --console --name="Mineru-PDF处理" --icon=NONE `
+          --hidden-import=bs4 `
+          --hidden-import=lxml `
+          --hidden-import=requests `
+          mineru_api.py
+        
+        # 打包不背单词核对工具
+        pyinstaller --onefile --console --name="不背单词核对" --icon=NONE `
+          --hidden-import=requests `
+          bbdc_word_checker.py
+    
+    - name: Copy additional files
+      run: |
+        # 复制到 dist 目录
+        Copy-Item "README.md" -Destination "dist/"
+        Copy-Item "requirements.txt" -Destination "dist/"
+        Copy-Item "*.bat" -Destination "dist/"
+        
+        # 创建示例 .env 文件
+        @"
+        # Mineru API Token
+        MINERU_API_TOKEN=your_token_here
+        
+        # SiliconFlow API Key (可选)
+        SILICONFLOW_API_KEY=
+        "@ | Out-File -FilePath "dist/.env.example" -Encoding UTF8
+    
+    - name: Create release package
+      run: |
+        # 创建版本信息文件
+        @"
+        不背单词单词本制作工具
+        
+        构建时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        提交: ${{ github.sha }}
+        分支: ${{ github.ref_name }}
+        
+        使用方法：
+        1. 配置 .env 文件（参考 .env.example）
+        2. 双击运行 .bat 批处理文件
+        3. 或直接运行 exe 可执行文件
+        
+        项目地址: ${{ github.repository }}
+        "@ | Out-File -FilePath "dist/VERSION.txt" -Encoding UTF8
+        
+        # 压缩打包
+        Compress-Archive -Path "dist/*" -DestinationPath "bbdc_word_tool_windows.zip"
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-executables
+        path: bbdc_word_tool_windows.zip
+        retention-days: 30
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: bbdc_word_tool_windows.zip
+        body: |
+          ## 不背单词单词本制作工具 ${{ github.ref_name }}
+          
+          ### 🎉 新版本发布
+          
+          **构建时间**: ${{ github.event.head_commit.timestamp }}
+          
+          ### 📦 包含文件
+          - 不背单词单词本制作.exe - 主程序（支持 PDF 和 Markdown）
+          - Mineru-PDF处理.exe - Mineru API 独立工具
+          - 不背单词核对.exe - 不背单词核对工具
+          - 批处理文件 (.bat)
+          - 配置文件示例 (.env.example)
+          - 说明文档
+          
+          ### 🚀 使用方法
+          1. 下载并解压 `bbdc_word_tool_windows.zip`
+          2. 将 `.env.example` 重命名为 `.env` 并配置 API Token
+          3. 双击批处理文件或直接运行 exe
+          
+          ### 📝 更新内容
+          详见提交记录
+          
+          ### 🔗 相关链接
+          - Mineru API: https://mineru.net/
+          - 不背单词: https://bbdc.cn/
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

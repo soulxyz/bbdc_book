@@ -4,3 +4,16 @@ __pycache__
 !readme.md
 !requirements.txt
 .env
+
+# PyInstaller 构建产物
+build/
+dist/
+*.spec
+*.exe
+
+# 打包文件
+*.zip
+
+# IDE
+.vscode/
+.idea/
