@@ -29,15 +29,23 @@ pip install -r requirements.txt
    
 2. 添加你的 API Token：
    ```
+   # Mineru API Token（必须，用于处理 PDF）
    MINERU_API_TOKEN=your_token_here
+   
+   # SiliconFlow API Key（可选，用于 AI 自动更正）
+   SILICONFLOW_API_KEY=your_key_here
    ```
    
-3. Token 获取地址：https://mineru.net/
+3. Token 获取地址：
+   - Mineru API: https://mineru.net/
+   - SiliconFlow API: https://cloud.siliconflow.cn/
+
+**🔍 测试配置**：运行 `测试env加载.bat` 检查 .env 文件是否正确加载
 
 **📦 打包后使用说明**：
 ```
 你的文件夹/
-├── 不背单词单词本制作.exe    ← 主程序
+├── bbdc_word_tool.exe          ← 主程序（可重命名为中文）
 └── .env                        ← 配置文件（从 .env.example 重命名）
 ```
 

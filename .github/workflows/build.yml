@@ -39,6 +39,7 @@ jobs:
           --hidden-import=lxml `
           --hidden-import=requests `
           --hidden-import=tqdm `
+          --hidden-import=env_loader `
           --collect-all tqdm `
           extract_words.py
     

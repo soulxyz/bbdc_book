@@ -14,6 +14,7 @@ import requests
 import json
 import time
 from typing import List, Dict, Optional
+from env_loader import load_env_variable, check_env_file_exists
 
 
 class LLMWordCorrector:
@@ -26,42 +27,23 @@ class LLMWordCorrector:
         参数:
             api_key: 硅基流动API密钥，如果不提供则从环境变量SILICONFLOW_API_KEY读取
         """
-        # 尝试从.env文件读取配置
-        self.api_key = api_key or self._load_from_env_file() or os.environ.get('SILICONFLOW_API_KEY', '')
-        self.base_url = os.environ.get('SILICONFLOW_BASE_URL', "https://api.siliconflow.cn/v1/chat/completions")
-        self.model = os.environ.get('SILICONFLOW_MODEL', "moonshotai/Kimi-K2-Instruct-0905")
+        # 使用统一的环境变量加载
+        self.api_key = api_key or load_env_variable('SILICONFLOW_API_KEY')
+        self.base_url = load_env_variable('SILICONFLOW_BASE_URL', "https://api.siliconflow.cn/v1/chat/completions")
+        self.model = load_env_variable('SILICONFLOW_MODEL', "moonshotai/Kimi-K2-Instruct-0905")
         
         if not self.api_key:
-            print("⚠️  警告: 未设置SILICONFLOW_API_KEY，LLM自动更正功能将被禁用")
-            print("💡 提示: 请查看 LLM使用说明.md 了解如何配置")
+            # 检查 .env 文件状态
+            exists, found_path, search_paths = check_env_file_exists()
+            
+            print("⚠️  警告: 未设置 SILICONFLOW_API_KEY，LLM自动更正功能将被禁用")
+            if exists:
+                print(f"💡 提示: 找到 .env 文件 ({found_path})，但其中没有 SILICONFLOW_API_KEY 配置")
+            else:
+                print(f"💡 提示: 未找到 .env 文件，请在 exe 所在目录创建 .env 文件")
+            print("   在 .env 文件中添加: SILICONFLOW_API_KEY=your_key_here")
+            print("   获取地址: https://cloud.siliconflow.cn/")
     
-    def _load_from_env_file(self):
-        """从.env文件加载API密钥"""
-        # 尝试多个可能的 .env 文件位置
-        possible_paths = [
-            # 1. 当前工作目录
-            os.path.join(os.getcwd(), '.env'),
-            # 2. exe 所在目录（打包后）
-            os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), '.env'),
-            # 3. 脚本所在目录（开发环境）
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'),
-        ]
-        
-        for env_file in possible_paths:
-            if os.path.exists(env_file):
-                try:
-                    with open(env_file, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith('#') and '=' in line:
-                                key, value = line.split('=', 1)
-                                key = key.strip()
-                                value = value.strip().strip('"').strip("'")
-                                if key == 'SILICONFLOW_API_KEY' and value:
-                                    return value
-                except Exception as e:
-                    continue
-        return None
     
     def is_enabled(self):
         """检查LLM功能是否启用"""
