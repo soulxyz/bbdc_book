@@ -33,11 +33,13 @@ jobs:
     
     - name: Build executables with PyInstaller
       run: |
-        # 打包主程序（带控制台）
-        pyinstaller --onefile --console --name="不背单词单词本制作" `
+        # 打包主程序（带控制台，使用英文名）
+        pyinstaller --onefile --console --name=bbdc_word_tool `
           --hidden-import=bs4 `
           --hidden-import=lxml `
           --hidden-import=requests `
+          --hidden-import=tqdm `
+          --collect-all tqdm `
           extract_words.py
     
     - name: Create .env.example
@@ -58,7 +60,7 @@ jobs:
       with:
         name: windows-executables
         path: |
-          dist/不背单词单词本制作.exe
+          dist/bbdc_word_tool.exe
           dist/.env.example
         retention-days: 30
     
@@ -67,7 +69,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          dist/不背单词单词本制作.exe
+          dist/bbdc_word_tool.exe
           dist/.env.example
         body: |
           ## 不背单词单词本制作工具 ${{ github.ref_name }}
@@ -78,14 +80,14 @@ jobs:
           
           ### 📦 下载文件
           
-          1. **不背单词单词本制作.exe** - 主程序
+          1. **bbdc_word_tool.exe** - 主程序（可自行重命名为中文）
           2. **.env.example** - 配置文件模板
           
           ### 🚀 快速开始
           
           1. **下载文件**
-             - 下载 `不背单词单词本制作.exe`
-             - 下载 `.env.example`（可选，如果要处理 PDF）
+             - 下载 `bbdc_word_tool.exe`（可重命名为中文）
+             - 下载 `.env.example`（处理 PDF 时需要）
           
           2. **配置（处理 PDF 必须）**
              ```
@@ -97,8 +99,9 @@ jobs:
              ⚠️ **重要**：.env 文件必须与 exe 放在同一文件夹
           
           3. **运行程序**
-             - 双击 `不背单词单词本制作.exe`
+             - 双击 `bbdc_word_tool.exe` 运行
              - 按提示拖入 PDF 或 Markdown 文件
+             - 💡 可以将 exe 重命名为中文名，不影响使用
           
           ### ✨ 支持的功能
           
@@ -113,7 +116,7 @@ jobs:
           
           ```
           你的文件夹/
-          ├── 不背单词单词本制作.exe
+          ├── bbdc_word_tool.exe      ← 主程序（可重命名为中文）
           └── .env                    ← 配置文件（如需处理 PDF）
           ```
           
