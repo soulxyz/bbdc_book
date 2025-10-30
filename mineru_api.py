@@ -17,6 +17,13 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import argparse
 
+# 尝试导入 tqdm 进度条库
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+
 
 class MineruAPIClient:
     """Mineru API 客户端"""
@@ -347,11 +354,15 @@ class MineruAPIClient:
         """
         print(f"⏳ 等待任务完成 (任务ID: {task_id})...")
         start_time = time.time()
+        pbar = None
+        last_state = None
         
         while True:
             elapsed_time = time.time() - start_time
             
             if elapsed_time > max_wait_time:
+                if pbar:
+                    pbar.close()
                 return {
                     'success': False,
                     'error': f'Task timeout after {max_wait_time} seconds'
@@ -360,14 +371,20 @@ class MineruAPIClient:
             status = self.get_task_status(task_id)
             
             if not status.get('success'):
+                if pbar:
+                    pbar.close()
                 return status
             
             state = status.get('state')
             
             if state == 'done':
+                if pbar:
+                    pbar.close()
                 print(f"✅ 任务完成！")
                 return status
             elif state == 'failed':
+                if pbar:
+                    pbar.close()
                 print(f"❌ 任务失败: {status.get('err_msg')}")
                 return {
                     'success': False,
@@ -378,11 +395,37 @@ class MineruAPIClient:
                 if progress:
                     extracted = progress.get('extracted_pages', 0)
                     total = progress.get('total_pages', 0)
-                    print(f"⏳ 正在解析... ({extracted}/{total} 页)")
+                    
+                    # 使用进度条（如果可用）
+                    if TQDM_AVAILABLE:
+                        if pbar is None:
+                            # 初始化进度条
+                            pbar = tqdm(
+                                total=total,
+                                desc="📄 PDF 解析进度",
+                                unit="页",
+                                ncols=80,
+                                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} 页 [{elapsed}<{remaining}]'
+                            )
+                        pbar.n = extracted
+                        pbar.refresh()
+                    else:
+                        # 无进度条库时使用文本显示
+                        percentage = (extracted / total * 100) if total > 0 else 0
+                        print(f"⏳ 正在解析... ({extracted}/{total} 页, {percentage:.1f}%)")
+                    
+                    last_state = 'running'
             elif state == 'pending':
-                print(f"⏳ 排队中...")
+                if last_state != 'pending':
+                    print(f"⏳ 排队中...")
+                    last_state = 'pending'
             elif state == 'converting':
-                print(f"⏳ 格式转换中...")
+                if last_state != 'converting':
+                    if pbar:
+                        pbar.close()
+                        pbar = None
+                    print(f"⏳ 格式转换中...")
+                    last_state = 'converting'
             
             time.sleep(check_interval)
     
@@ -400,11 +443,15 @@ class MineruAPIClient:
         """
         print(f"⏳ 等待批量任务完成 (批次ID: {batch_id})...")
         start_time = time.time()
+        pbars = {}  # 每个文件一个进度条
         
         while True:
             elapsed_time = time.time() - start_time
             
             if elapsed_time > max_wait_time:
+                for pbar in pbars.values():
+                    if pbar:
+                        pbar.close()
                 return {
                     'success': False,
                     'error': f'Batch task timeout after {max_wait_time} seconds'
@@ -413,6 +460,9 @@ class MineruAPIClient:
             status = self.get_batch_status(batch_id)
             
             if not status.get('success'):
+                for pbar in pbars.values():
+                    if pbar:
+                        pbar.close()
                 return status
             
             results = status.get('extract_result', [])
@@ -426,9 +476,16 @@ class MineruAPIClient:
                 file_name = result.get('file_name')
                 
                 if state == 'done':
+                    # 关闭该文件的进度条
+                    if file_name in pbars and pbars[file_name]:
+                        pbars[file_name].close()
+                        pbars[file_name] = None
                     continue
                 elif state == 'failed':
                     has_failed = True
+                    if file_name in pbars and pbars[file_name]:
+                        pbars[file_name].close()
+                        pbars[file_name] = None
                     print(f"❌ 文件 {file_name} 解析失败: {result.get('err_msg')}")
                 elif state in ['pending', 'running', 'converting', 'waiting-file']:
                     all_done = False
@@ -437,9 +494,30 @@ class MineruAPIClient:
                         if progress:
                             extracted = progress.get('extracted_pages', 0)
                             total = progress.get('total_pages', 0)
-                            print(f"⏳ {file_name} 正在解析... ({extracted}/{total} 页)")
+                            
+                            # 使用进度条（如果可用）
+                            if TQDM_AVAILABLE:
+                                if file_name not in pbars or pbars[file_name] is None:
+                                    # 初始化进度条
+                                    pbars[file_name] = tqdm(
+                                        total=total,
+                                        desc=f"📄 {file_name}",
+                                        unit="页",
+                                        ncols=80,
+                                        position=len(pbars),
+                                        bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} 页'
+                                    )
+                                pbars[file_name].n = extracted
+                                pbars[file_name].refresh()
+                            else:
+                                # 无进度条库时使用文本显示
+                                percentage = (extracted / total * 100) if total > 0 else 0
+                                print(f"⏳ {file_name} 正在解析... ({extracted}/{total} 页, {percentage:.1f}%)")
             
             if all_done:
+                for pbar in pbars.values():
+                    if pbar:
+                        pbar.close()
                 if has_failed:
                     print(f"⚠️  部分任务失败")
                 else:
