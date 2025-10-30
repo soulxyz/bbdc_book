@@ -9,6 +9,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:  # 允许手动触发
 
+permissions:
+  contents: write  # 需要写权限才能创建 Release
+
 jobs:
   build-windows:
     runs-on: windows-latest
