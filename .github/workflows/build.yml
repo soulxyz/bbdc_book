@@ -30,25 +30,12 @@ jobs:
     
     - name: Build executables with PyInstaller
       run: |
-        # 打包主程序
-        pyinstaller --onefile --windowed --name="不背单词单词本制作" --icon=NONE `
-          --add-data "README.md;." `
+        # 打包主程序（带控制台）
+        pyinstaller --onefile --console --name="不背单词单词本制作" `
           --hidden-import=bs4 `
           --hidden-import=lxml `
           --hidden-import=requests `
           extract_words.py
-        
-        # 打包 Mineru API 工具
-        pyinstaller --onefile --console --name="Mineru-PDF处理" --icon=NONE `
-          --hidden-import=bs4 `
-          --hidden-import=lxml `
-          --hidden-import=requests `
-          mineru_api.py
-        
-        # 打包不背单词核对工具
-        pyinstaller --onefile --console --name="不背单词核对" --icon=NONE `
-          --hidden-import=requests `
-          bbdc_word_checker.py
     
     - name: Copy additional files
       run: |
@@ -107,12 +94,10 @@ jobs:
           **构建时间**: ${{ github.event.head_commit.timestamp }}
           
           ### 📦 包含文件
-          - 不背单词单词本制作.exe - 主程序（支持 PDF 和 Markdown）
-          - Mineru-PDF处理.exe - Mineru API 独立工具
-          - 不背单词核对.exe - 不背单词核对工具
-          - 批处理文件 (.bat)
-          - 配置文件示例 (.env.example)
-          - 说明文档
+          - 不背单词单词本制作.exe - 主程序（支持 PDF 和 Markdown 文件处理）
+          - 批处理文件 (.bat) - 快速启动脚本
+          - 配置文件示例 (.env.example) - API Token 配置模板
+          - README.md - 使用说明文档
           
           ### 🚀 使用方法
           1. 下载并解压 `bbdc_word_tool_windows.zip`

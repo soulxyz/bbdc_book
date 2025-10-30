@@ -1,6 +1,14 @@
 # 不背单词词书制作工具
 
-一个帮助你从 Markdown 文件中提取单词，并自动核对的小工具。最近加入了 AI 自动更正功能，可以智能识别并修正拼写错误。
+一个帮助你从 **PDF 或 Markdown** 文件中提取单词，并自动核对的小工具。支持 AI 自动更正功能，可以智能识别并修正拼写错误。
+
+## ✨ 特性
+
+- 📄 **支持 PDF 文件**（通过 Mineru API 自动转换为 Markdown）
+- 📝 **支持 Markdown 文件**
+- 🔍 自动提取单词并去重
+- ✅ 自动核对单词（不背单词 API）
+- 🤖 AI 自动更正错误单词（可选）
 
 ## 快速开始
 
@@ -10,6 +18,17 @@
 pip install -r requirements.txt
 ```
 
+### 配置（处理 PDF 时必须）
+
+如果要处理 PDF 文件，需要配置 Mineru API Token：
+
+1. 在项目根目录创建 `.env` 文件
+2. 添加你的 API Token：
+   ```
+   MINERU_API_TOKEN=your_token_here
+   ```
+3. Token 获取地址：https://mineru.net/
+
 ### 基础使用
 
 直接运行程序，按提示操作：
@@ -18,16 +37,22 @@ pip install -r requirements.txt
 python extract_words.py
 ```
 
-程序会提示你选择 Markdown 文件，然后自动提取单词并核对。
+程序会提示你选择文件（支持 **PDF** 或 **Markdown**），然后自动提取单词并核对。
+
+**处理 PDF**：拖入 PDF 文件 → 自动上传到 Mineru API → 转换为 Markdown → 提取单词 → 自动核对
+
+**处理 Markdown**：拖入 MD 文件 → 直接提取单词 → 自动核对
 
 ## 主要功能
 
 ### 单词提取
 
-从 Markdown 表格中提取单词，支持：
-- 自动识别单词和短语
-- 去除重复单词
-- 批量处理多个文件
+从 **PDF 或 Markdown** 表格中提取单词，支持：
+- 📄 **PDF 文件自动转换**（Mineru API）
+- 📝 Markdown 表格解析
+- 🔄 自动识别单词和短语
+- ✂️ 去除重复单词
+- 📁 批量处理多个文件
 
 ### 自动核对
 
