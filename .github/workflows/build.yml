@@ -46,10 +46,12 @@ jobs:
         
         # 创建示例 .env 文件
         @"
-        # Mineru API Token
+        # Mineru API Token （必须配置才能处理 PDF 文件）
+        # 获取地址：https://mineru.net/
         MINERU_API_TOKEN=your_token_here
         
-        # SiliconFlow API Key (可选)
+        # SiliconFlow API Key （可选，用于 AI 自动更正功能）
+        # 获取地址：https://cloud.siliconflow.cn/
         SILICONFLOW_API_KEY=
         "@ | Out-File -FilePath "dist/.env.example" -Encoding UTF8
     
@@ -63,12 +65,40 @@ jobs:
         提交: ${{ github.sha }}
         分支: ${{ github.ref_name }}
         
-        使用方法：
-        1. 配置 .env 文件（参考 .env.example）
-        2. 双击运行 .bat 批处理文件
-        3. 或直接运行 exe 可执行文件
+        ============================================
+        📖 快速开始
+        ============================================
         
-        项目地址: ${{ github.repository }}
+        1. 配置 .env 文件（处理 PDF 必须）
+           - 将 .env.example 重命名为 .env
+           - 在 .env 文件中填入你的 Mineru API Token
+           - ⚠️ .env 文件必须与 exe 放在同一目录下！
+           
+        2. 运行程序
+           方式1：双击 运行.bat 或 运行快速版.bat
+           方式2：直接双击 不背单词单词本制作.exe
+           
+        3. 拖入文件
+           - 支持 PDF 文件（需要配置 .env）
+           - 支持 Markdown 文件（.md）
+        
+        ============================================
+        📁 文件结构（重要！）
+        ============================================
+        
+        你的文件夹/
+        ├── 不背单词单词本制作.exe
+        ├── .env                    ← 配置文件必须在这里！
+        ├── 运行.bat
+        └── ...
+        
+        ============================================
+        🔗 相关链接
+        ============================================
+        
+        项目地址: https://github.com/${{ github.repository }}
+        Mineru API: https://mineru.net/
+        不背单词: https://bbdc.cn/
         "@ | Out-File -FilePath "dist/VERSION.txt" -Encoding UTF8
         
         # 压缩打包

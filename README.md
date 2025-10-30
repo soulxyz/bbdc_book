@@ -22,12 +22,25 @@ pip install -r requirements.txt
 
 如果要处理 PDF 文件，需要配置 Mineru API Token：
 
-1. 在项目根目录创建 `.env` 文件
+1. 创建 `.env` 文件：
+   - **开发环境**：在项目根目录创建
+   - **打包后 exe**：在 exe 所在目录创建（与 exe 文件同级）
+   
 2. 添加你的 API Token：
    ```
    MINERU_API_TOKEN=your_token_here
    ```
+   
 3. Token 获取地址：https://mineru.net/
+
+**📦 打包后使用说明**：
+```
+你的文件夹/
+├── 不背单词单词本制作.exe
+├── .env                    ← 在这里创建配置文件
+├── 运行.bat
+└── ...
+```
 
 ### 基础使用
 

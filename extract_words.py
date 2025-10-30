@@ -37,20 +37,30 @@ class LLMWordCorrector:
     
     def _load_from_env_file(self):
         """从.env文件加载API密钥"""
-        env_file = os.path.join(os.path.dirname(__file__), '.env')
-        if os.path.exists(env_file):
-            try:
-                with open(env_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#') and '=' in line:
-                            key, value = line.split('=', 1)
-                            key = key.strip()
-                            value = value.strip().strip('"').strip("'")
-                            if key == 'SILICONFLOW_API_KEY' and value:
-                                return value
-            except Exception as e:
-                print(f"⚠️  读取.env文件失败: {e}")
+        # 尝试多个可能的 .env 文件位置
+        possible_paths = [
+            # 1. 当前工作目录
+            os.path.join(os.getcwd(), '.env'),
+            # 2. exe 所在目录（打包后）
+            os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), '.env'),
+            # 3. 脚本所在目录（开发环境）
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'),
+        ]
+        
+        for env_file in possible_paths:
+            if os.path.exists(env_file):
+                try:
+                    with open(env_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith('#') and '=' in line:
+                                key, value = line.split('=', 1)
+                                key = key.strip()
+                                value = value.strip().strip('"').strip("'")
+                                if key == 'SILICONFLOW_API_KEY' and value:
+                                    return value
+                except Exception as e:
+                    continue
         return None
     
     def is_enabled(self):

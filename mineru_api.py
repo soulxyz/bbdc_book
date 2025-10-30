@@ -33,12 +33,20 @@ class MineruAPIClient:
         self.session = requests.Session()
         
         if not self.api_token:
+            # 显示查找过的路径
+            search_paths = [
+                os.path.join(os.getcwd(), '.env'),
+                os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), '.env'),
+            ]
+            paths_info = '\n'.join([f"  - {p}" for p in search_paths])
+            
             raise ValueError(
-                "❌ 未设置 Mineru API Token！\n"
+                "❌ 未设置 Mineru API Token！\n\n"
+                f"已查找以下位置但未找到 .env 文件：\n{paths_info}\n\n"
                 "请通过以下方式之一设置：\n"
-                "1. 在当前目录创建 .env 文件，添加: MINERU_API_TOKEN=your_token_here\n"
+                "1. 在 exe 所在目录创建 .env 文件，添加: MINERU_API_TOKEN=your_token_here\n"
                 "2. 设置环境变量: MINERU_API_TOKEN\n"
-                "3. 在代码中直接传入 api_token 参数\n"
+                "3. 在代码中直接传入 api_token 参数\n\n"
                 "Token 获取地址: https://mineru.net/"
             )
         
@@ -56,21 +64,31 @@ class MineruAPIClient:
         if token:
             return token
         
-        # 尝试从.env文件读取
-        env_file = os.path.join(os.path.dirname(__file__), '.env')
-        if os.path.exists(env_file):
-            try:
-                with open(env_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#') and '=' in line:
-                            key, value = line.split('=', 1)
-                            key = key.strip()
-                            value = value.strip().strip('"').strip("'")
-                            if key == 'MINERU_API_TOKEN' and value:
-                                return value
-            except Exception as e:
-                print(f"⚠️  读取.env文件失败: {e}")
+        # 尝试多个可能的 .env 文件位置
+        possible_paths = [
+            # 1. 当前工作目录
+            os.path.join(os.getcwd(), '.env'),
+            # 2. exe 所在目录（打包后）
+            os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), '.env'),
+            # 3. 脚本所在目录（开发环境）
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'),
+        ]
+        
+        for env_file in possible_paths:
+            if os.path.exists(env_file):
+                try:
+                    with open(env_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith('#') and '=' in line:
+                                key, value = line.split('=', 1)
+                                key = key.strip()
+                                value = value.strip().strip('"').strip("'")
+                                if key == 'MINERU_API_TOKEN' and value:
+                                    return value
+                except Exception as e:
+                    print(f"⚠️  读取 {env_file} 失败: {e}")
+                    continue
         
         return None
     
