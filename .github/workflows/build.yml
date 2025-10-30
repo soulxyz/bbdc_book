@@ -37,13 +37,8 @@ jobs:
           --hidden-import=requests `
           extract_words.py
     
-    - name: Copy additional files
+    - name: Create .env.example
       run: |
-        # 复制到 dist 目录
-        Copy-Item "README.md" -Destination "dist/"
-        Copy-Item "requirements.txt" -Destination "dist/"
-        Copy-Item "*.bat" -Destination "dist/"
-        
         # 创建示例 .env 文件
         @"
         # Mineru API Token （必须配置才能处理 PDF 文件）
@@ -55,67 +50,22 @@ jobs:
         SILICONFLOW_API_KEY=
         "@ | Out-File -FilePath "dist/.env.example" -Encoding UTF8
     
-    - name: Create release package
-      run: |
-        # 创建版本信息文件
-        @"
-        不背单词单词本制作工具
-        
-        构建时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-        提交: ${{ github.sha }}
-        分支: ${{ github.ref_name }}
-        
-        ============================================
-        📖 快速开始
-        ============================================
-        
-        1. 配置 .env 文件（处理 PDF 必须）
-           - 将 .env.example 重命名为 .env
-           - 在 .env 文件中填入你的 Mineru API Token
-           - ⚠️ .env 文件必须与 exe 放在同一目录下！
-           
-        2. 运行程序
-           方式1：双击 运行.bat 或 运行快速版.bat
-           方式2：直接双击 不背单词单词本制作.exe
-           
-        3. 拖入文件
-           - 支持 PDF 文件（需要配置 .env）
-           - 支持 Markdown 文件（.md）
-        
-        ============================================
-        📁 文件结构（重要！）
-        ============================================
-        
-        你的文件夹/
-        ├── 不背单词单词本制作.exe
-        ├── .env                    ← 配置文件必须在这里！
-        ├── 运行.bat
-        └── ...
-        
-        ============================================
-        🔗 相关链接
-        ============================================
-        
-        项目地址: https://github.com/${{ github.repository }}
-        Mineru API: https://mineru.net/
-        不背单词: https://bbdc.cn/
-        "@ | Out-File -FilePath "dist/VERSION.txt" -Encoding UTF8
-        
-        # 压缩打包
-        Compress-Archive -Path "dist/*" -DestinationPath "bbdc_word_tool_windows.zip"
-    
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: windows-executables
-        path: bbdc_word_tool_windows.zip
+        path: |
+          dist/不背单词单词本制作.exe
+          dist/.env.example
         retention-days: 30
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1
       with:
-        files: bbdc_word_tool_windows.zip
+        files: |
+          dist/不背单词单词本制作.exe
+          dist/.env.example
         body: |
           ## 不背单词单词本制作工具 ${{ github.ref_name }}
           
@@ -123,23 +73,56 @@ jobs:
           
           **构建时间**: ${{ github.event.head_commit.timestamp }}
           
-          ### 📦 包含文件
-          - 不背单词单词本制作.exe - 主程序（支持 PDF 和 Markdown 文件处理）
-          - 批处理文件 (.bat) - 快速启动脚本
-          - 配置文件示例 (.env.example) - API Token 配置模板
-          - README.md - 使用说明文档
+          ### 📦 下载文件
           
-          ### 🚀 使用方法
-          1. 下载并解压 `bbdc_word_tool_windows.zip`
-          2. 将 `.env.example` 重命名为 `.env` 并配置 API Token
-          3. 双击批处理文件或直接运行 exe
+          1. **不背单词单词本制作.exe** - 主程序
+          2. **.env.example** - 配置文件模板
           
-          ### 📝 更新内容
-          详见提交记录
+          ### 🚀 快速开始
+          
+          1. **下载文件**
+             - 下载 `不背单词单词本制作.exe`
+             - 下载 `.env.example`（可选，如果要处理 PDF）
+          
+          2. **配置（处理 PDF 必须）**
+             ```
+             # 将 .env.example 重命名为 .env
+             # 编辑 .env 文件，填入你的 Mineru API Token
+             MINERU_API_TOKEN=your_token_here
+             ```
+             
+             ⚠️ **重要**：.env 文件必须与 exe 放在同一文件夹
+          
+          3. **运行程序**
+             - 双击 `不背单词单词本制作.exe`
+             - 按提示拖入 PDF 或 Markdown 文件
+          
+          ### ✨ 支持的功能
+          
+          - 📄 **PDF 文件处理**（需配置 Mineru API Token）
+          - 📝 **Markdown 文件处理**
+          - 🔍 自动提取单词并去重
+          - ✅ 自动核对单词（不背单词 API）
+          - 🤖 AI 自动更正错误单词（可选）
+          - 📊 实时进度条显示
+          
+          ### 📁 文件结构示例
+          
+          ```
+          你的文件夹/
+          ├── 不背单词单词本制作.exe
+          └── .env                    ← 配置文件（如需处理 PDF）
+          ```
           
           ### 🔗 相关链接
+          
+          - 项目地址: https://github.com/${{ github.repository }}
           - Mineru API: https://mineru.net/
           - 不背单词: https://bbdc.cn/
+          
+          ### 📝 更新内容
+          
+          详见提交记录
         draft: false
         prerelease: false
       env:
