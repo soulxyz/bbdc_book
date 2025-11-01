@@ -1,19 +1,71 @@
-__pycache__
-*.md
-*.txt
-!readme.md
-!requirements.txt
-.env
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
 
-# PyInstaller 构建产物
+# PyInstaller
 build/
 dist/
 *.spec
-*.exe
 
-# 打包文件
+# Rust
+target/
+Cargo.lock
+*.rs.bk
+*.pdb
+
+# 环境变量
+.env
+.env.local
+
+# 临时文件和输出
+*.txt
+*.backup
+!requirements.txt
+!README*.txt
+
+# Markdown（保留README）
+*.md
+!README.md
+!BUILD.md
+!CHANGELOG.md
+
+# 测试数据
+20天背完考研核心926词汇*.md
+20天背完考研核心926词汇*.txt
+bbdc_check_detail_*.txt
+
+# 可执行文件
+*.exe
+!rust/target/release/*.exe
+
+# 压缩包
 *.zip
+*.tar.gz
+*.rar
 
 # IDE
 .vscode/
 .idea/
+.vs/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志
+*.log
+
+# 批处理文件的临时文件
+*.bat~

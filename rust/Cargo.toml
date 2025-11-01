@@ -1,0 +1,61 @@
+[package]
+name = "bbdc_word_tool"
+version = "1.0.0"
+edition = "2021"
+authors = ["BBDC Tool Contributors"]
+description = "A tool to extract words from Markdown and check with BBDC (不背单词)"
+license = "MIT"
+
+[[bin]]
+name = "bbdc_word_tool"
+path = "src/main.rs"
+
+[dependencies]
+# HTTP客户端
+reqwest = { version = "0.11", features = ["json", "blocking", "multipart"] }
+
+# HTML/Markdown解析
+scraper = "0.18"
+html5ever = "0.26"
+
+# JSON序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 环境变量加载
+dotenv = "0.15"
+
+# 错误处理
+anyhow = "1.0"
+thiserror = "1.0"
+
+# 日志
+log = "0.4"
+env_logger = "0.11"
+
+# 命令行解析
+clap = { version = "4.4", features = ["derive"] }
+
+# 异步运行时
+tokio = { version = "1.35", features = ["full"] }
+
+# GUI框架
+iced = { version = "0.12", features = ["tokio"] }
+
+# 进度条
+indicatif = "0.17"
+
+# 文件操作
+walkdir = "2.4"
+
+# 字符串处理
+regex = "1.10"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true  # 移除调试符号，减小二进制大小

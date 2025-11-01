@@ -88,7 +88,7 @@ def _read_key_from_file(env_file: str, key: str) -> str:
         str: 键对应的值，如果不存在返回空字符串
     """
     try:
-        with open(env_file, 'r', encoding='utf-8') as f:
+        with open(env_file, 'r', encoding='utf-8-sig') as f:  # utf-8-sig 自动处理 BOM
             for line in f:
                 line = line.strip()
                 # 跳过空行和注释
