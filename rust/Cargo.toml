@@ -51,6 +51,9 @@ walkdir = "2.4"
 # 字符串处理
 regex = "1.10"
 
+# ZIP 解压
+zip = "0.6"
+
 [dev-dependencies]
 tokio-test = "0.4"
 

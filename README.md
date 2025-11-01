@@ -26,7 +26,7 @@ cargo build --release
 | 启动速度 | ~1-2秒 | **<0.1秒** |
 | 内存占用 | ~50MB | **~5MB** |
 | GUI界面 | ✅ 完整 | ❌ |
-| PDF处理 | ✅ | ❌ |
+| PDF处理 | ✅ | ✅ |
 
 ## 核心功能
 
@@ -36,10 +36,10 @@ cargo build --release
 
 ## 配置（可选）
 
-创建 `.env` 文件：
+创建 `.env` 文件（在 python/ 或 rust/ 目录下）：
 ```env
 SILICONFLOW_API_KEY=your_key_here  # LLM更正
-MINERU_API_TOKEN=your_token_here   # PDF处理（Python版）
+MINERU_API_TOKEN=your_token_here   # PDF处理
 ```
 
 ## 使用示例
@@ -58,6 +58,39 @@ bbdc_word_tool extract input.md
 
 - [Python 版本](python/README.md)
 - [Rust 版本](rust/README.md)
+
+## 🚀 发布新版本
+
+### 快速发布（推荐）
+
+**Windows:**
+```powershell
+.\release.ps1 0.0.2
+```
+
+**Linux/macOS:**
+```bash
+chmod +x release.sh
+./release.sh 0.0.2
+```
+
+### 手动发布
+
+```bash
+# 1. 更新版本号
+echo "0.0.2" > VERSION
+
+# 2. 提交并推送
+git add .
+git commit -m "chore: bump version to 0.0.2"
+git push
+
+# 3. 创建并推送标签（触发自动构建）
+git tag v0.0.2
+git push origin v0.0.2
+```
+
+详见 [RELEASE.md](RELEASE.md)
 
 ## 许可证
 

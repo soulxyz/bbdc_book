@@ -116,11 +116,26 @@ impl Cli {
         auto_check: bool,
         mode: &str,
     ) -> Result<()> {
+        // 检查是否是 PDF 文件
+        let is_pdf = input.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase() == "pdf")
+            .unwrap_or(false);
+        
+        let markdown_file = if is_pdf {
+            println!("📄 检测到 PDF 文件，正在通过 Mineru API 处理...");
+            let client = crate::pdf_processor::MineruClient::new()?;
+            let out_dir = output.as_ref().and_then(|p| p.parent()).map(|p| p.to_path_buf());
+            client.process_pdf(&input, out_dir.as_ref(), true)?
+        } else {
+            input.clone()
+        };
+        
         println!("📝 开始提取单词...");
         
         let include_phrases = mode == "full";
         let extractor = WordExtractor::new(unique, include_phrases);
-        let result = extractor.extract_from_file(&input)?;
+        let result = extractor.extract_from_file(&markdown_file)?;
         
         println!("✅ 提取完成！");
         println!("   单词数: {}", result.total_words);
@@ -221,14 +236,14 @@ impl Cli {
     fn interactive_mode(cli: Cli) -> Result<()> {
         println!("\n{}", "=".repeat(60));
         println!("           📚 单词提取工具 - Word Extractor");
-        println!("           支持 Markdown 文件");
+        println!("           支持 PDF 和 Markdown 文件");
         println!("{}\n", "=".repeat(60));
         
         // 获取输入文件
         let input_file = if let Some(input) = cli.input {
             input
         } else {
-            println!("📂 请输入 Markdown 文件路径:");
+            println!("📂 请输入文件路径（PDF 或 Markdown）:");
             let mut input = String::new();
             io::stdin().read_line(&mut input)?;
             PathBuf::from(input.trim().trim_matches('"'))
@@ -237,6 +252,21 @@ impl Cli {
         if !input_file.exists() {
             return Err(Error::Other(format!("文件不存在: {:?}", input_file)));
         }
+        
+        // 检查是否是 PDF
+        let is_pdf = input_file.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase() == "pdf")
+            .unwrap_or(false);
+        
+        let markdown_file = if is_pdf {
+            println!("\n📄 检测到 PDF 文件，正在通过 Mineru API 处理...");
+            let client = crate::pdf_processor::MineruClient::new()?;
+            let out_dir = cli.output.as_ref().and_then(|p| p.parent()).map(|p| p.to_path_buf());
+            client.process_pdf(&input_file, out_dir.as_ref(), true)?
+        } else {
+            input_file.clone()
+        };
         
         // 确定输出文件
         let output_file = if let Some(output) = cli.output {
@@ -249,7 +279,7 @@ impl Cli {
         println!("\n🔄 正在提取单词...");
         
         let extractor = WordExtractor::new(cli.unique, cli.include_phrases);
-        let result = extractor.extract_from_file(&input_file)?;
+        let result = extractor.extract_from_file(&markdown_file)?;
         
         println!("✅ 提取完成！共 {} 个单词", result.total_words);
         

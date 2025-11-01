@@ -1,0 +1,244 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 触发条件: 推送如 v0.0.1 的标签
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            ## 🎉 BBDC Word Tool ${{ steps.get_version.outputs.version }}
+            
+            ### 📦 下载
+            - **Windows (Rust)**: bbdc_word_tool-${{ steps.get_version.outputs.version }}-windows.zip
+            - **Windows (Python)**: bbdc_word_tool-${{ steps.get_version.outputs.version }}-python.zip
+            - **Linux (Rust)**: bbdc_word_tool-${{ steps.get_version.outputs.version }}-linux.tar.gz
+            - **macOS (Rust)**: bbdc_word_tool-${{ steps.get_version.outputs.version }}-macos.tar.gz
+            
+            ### 📝 更新内容
+            请查看 commit 记录
+            
+            ### 🚀 使用方式
+            1. 下载对应平台的压缩包
+            2. 解压到任意目录
+            3. 参考 README.md 使用
+          draft: false
+          prerelease: false
+
+  # Rust 版本 - Windows
+  build-rust-windows:
+    name: Build Rust (Windows)
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: rust/target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: |
+          cd rust
+          cargo build --release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path release
+          Copy-Item rust/target/release/bbdc_word_tool.exe release/
+          Copy-Item rust/README.md release/
+          Copy-Item rust/.env.example release/
+          Compress-Archive -Path release/* -DestinationPath bbdc_word_tool-${{ needs.create-release.outputs.version }}-windows.zip
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./bbdc_word_tool-${{ needs.create-release.outputs.version }}-windows.zip
+          asset_name: bbdc_word_tool-${{ needs.create-release.outputs.version }}-windows.zip
+          asset_content_type: application/zip
+
+  # Rust 版本 - Linux
+  build-rust-linux:
+    name: Build Rust (Linux)
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: |
+          cd rust
+          cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p release
+          cp rust/target/release/bbdc_word_tool release/
+          cp rust/README.md release/
+          cp rust/.env.example release/
+          tar -czf bbdc_word_tool-${{ needs.create-release.outputs.version }}-linux.tar.gz -C release .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./bbdc_word_tool-${{ needs.create-release.outputs.version }}-linux.tar.gz
+          asset_name: bbdc_word_tool-${{ needs.create-release.outputs.version }}-linux.tar.gz
+          asset_content_type: application/gzip
+
+  # Rust 版本 - macOS
+  build-rust-macos:
+    name: Build Rust (macOS)
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: |
+          cd rust
+          cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p release
+          cp rust/target/release/bbdc_word_tool release/
+          cp rust/README.md release/
+          cp rust/.env.example release/
+          tar -czf bbdc_word_tool-${{ needs.create-release.outputs.version }}-macos.tar.gz -C release .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./bbdc_word_tool-${{ needs.create-release.outputs.version }}-macos.tar.gz
+          asset_name: bbdc_word_tool-${{ needs.create-release.outputs.version }}-macos.tar.gz
+          asset_content_type: application/gzip
+
+  # Python 版本 - Windows
+  build-python-windows:
+    name: Build Python (Windows)
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          cd python
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          cd python
+          pyinstaller --onefile --name bbdc_word_tool extract_words.py
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path release-python
+          Copy-Item python/dist/bbdc_word_tool.exe release-python/
+          Copy-Item python/*.py release-python/
+          Copy-Item python/requirements.txt release-python/
+          Copy-Item python/README.md release-python/
+          Copy-Item python/.env.example release-python/ -ErrorAction SilentlyContinue
+          Copy-Item python/*.bat release-python/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path release-python/* -DestinationPath bbdc_word_tool-${{ needs.create-release.outputs.version }}-python.zip
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./bbdc_word_tool-${{ needs.create-release.outputs.version }}-python.zip
+          asset_name: bbdc_word_tool-${{ needs.create-release.outputs.version }}-python.zip
+          asset_content_type: application/zip
+

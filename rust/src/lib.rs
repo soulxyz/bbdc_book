@@ -6,6 +6,7 @@ pub mod env_loader;
 pub mod word_extractor;
 pub mod bbdc_checker;
 pub mod llm_corrector;
+pub mod pdf_processor;
 pub mod cli;
 
 // 重新导出常用类型
@@ -13,6 +14,7 @@ pub use env_loader::EnvLoader;
 pub use word_extractor::{WordExtractor, Word, ExtractResult};
 pub use bbdc_checker::{BBDCChecker, CheckResult};
 pub use llm_corrector::{LLMCorrector, CorrectionResult};
+pub use pdf_processor::MineruClient;
 
 /// 错误类型
 #[derive(Debug, thiserror::Error)]
