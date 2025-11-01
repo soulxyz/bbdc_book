@@ -92,6 +92,19 @@ git push origin v0.0.2
 
 详见 [RELEASE.md](RELEASE.md)
 
+### 构建失败？
+
+如果 GitHub Actions 构建失败，使用清理脚本：
+```powershell
+# Windows
+.\cleanup-release.ps1 0.0.2
+
+# Linux/macOS
+./cleanup-release.sh 0.0.2
+```
+
+详见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
 ## 许可证
 
 MIT License

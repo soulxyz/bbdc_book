@@ -52,6 +52,7 @@ jobs:
     name: Build Rust (Windows)
     needs: create-release
     runs-on: windows-latest
+    continue-on-error: false
     steps:
       - uses: actions/checkout@v3
 
@@ -80,18 +81,29 @@ jobs:
           path: rust/target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build
+      - name: Build Rust
         run: |
           cd rust
-          cargo build --release
+          cargo build --release --verbose
+        shell: pwsh
 
-      - name: Package
+      - name: Verify build
+        run: |
+          if (!(Test-Path "rust/target/release/bbdc_word_tool.exe")) {
+            Write-Error "构建失败: 可执行文件不存在"
+            exit 1
+          }
+          Write-Host "✅ 构建成功"
+        shell: pwsh
+
+      - name: Package Rust
         run: |
           New-Item -ItemType Directory -Force -Path release
           Copy-Item rust/target/release/bbdc_word_tool.exe release/
           Copy-Item rust/README.md release/
-          Copy-Item rust/.env.example release/
+          if (Test-Path rust/.env.example) { Copy-Item rust/.env.example release/ }
           Compress-Archive -Path release/* -DestinationPath bbdc_word_tool-${{ needs.create-release.outputs.version }}-windows.zip
+        shell: pwsh
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -202,6 +214,7 @@ jobs:
     name: Build Python (Windows)
     needs: create-release
     runs-on: windows-latest
+    continue-on-error: false
     steps:
       - uses: actions/checkout@v3
 
@@ -219,7 +232,8 @@ jobs:
       - name: Build with PyInstaller
         run: |
           cd python
-          pyinstaller --onefile --name bbdc_word_tool extract_words.py
+          pyinstaller --onefile --name bbdc_word_tool --add-data ".env.example;." extract_words.py
+        shell: pwsh
 
       - name: Package
         run: |
@@ -228,9 +242,10 @@ jobs:
           Copy-Item python/*.py release-python/
           Copy-Item python/requirements.txt release-python/
           Copy-Item python/README.md release-python/
-          Copy-Item python/.env.example release-python/ -ErrorAction SilentlyContinue
-          Copy-Item python/*.bat release-python/ -ErrorAction SilentlyContinue
+          if (Test-Path python/.env.example) { Copy-Item python/.env.example release-python/ }
+          Get-ChildItem python/*.bat | ForEach-Object { Copy-Item $_.FullName release-python/ }
           Compress-Archive -Path release-python/* -DestinationPath bbdc_word_tool-${{ needs.create-release.outputs.version }}-python.zip
+        shell: pwsh
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
