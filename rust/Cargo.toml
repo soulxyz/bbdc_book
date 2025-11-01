@@ -1,6 +1,6 @@
 [package]
 name = "bbdc_word_tool"
-version = "1.0.0"
+version = "0.0.2"
 edition = "2021"
 authors = ["BBDC Tool Contributors"]
 description = "A tool to extract words from Markdown and check with BBDC (不背单词)"
